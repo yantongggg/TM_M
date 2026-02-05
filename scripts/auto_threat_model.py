@@ -160,7 +160,7 @@ Generate the complete XML threat model following the specified format."""
 
         try:
             response = self.client.chat.completions.create(
-                model="glm-4-flash",  # Using GLM-4-flash model; alternatives: glm-4-plus, glm-4-air
+                model="glm-4",  # Using GLM-4 model; alternatives: glm-4-plus, glm-4-air
                 messages=[
                     {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": user_prompt}
