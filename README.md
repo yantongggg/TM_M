@@ -8,6 +8,7 @@ This project implements a "Threat Modeling as Code" approach that automatically 
 
 ## Features
 
+- **🤖 Auto-Discovery**: Automatically scans codebase and generates architecture.yaml
 - **Automated STRIDE Analysis**: Leverages AI to systematically identify threats across all STRIDE categories
 - **CI/CD Integration**: GitHub Actions workflow that runs on every PR and push
 - **Build Breaking**: Automatically fails builds when Critical or High severity threats are detected
@@ -18,11 +19,35 @@ This project implements a "Threat Modeling as Code" approach that automatically 
 
 ## 🚀 Quick Start
 
-### Option A: Use in This Repository (Standalone)
+### 🌟 New: Auto-Discovery Mode (Simplest!)
 
-Follow these steps to use the threat modeling in a single repository.
+**Just add the workflow - no manual setup needed!**
 
-### 1. Repository Setup
+Create `.github/workflows/threat-modeling.yml`:
+
+```yaml
+name: Threat Modeling
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  threat-modeling:
+    uses: yantongggg/TMm_sCaN/.github/workflows/threat-modeling-reusable.yml@master
+    secrets:
+      zhipu_api_key: ${{ secrets.ZHIPU_API_KEY }}
+```
+
+Add `ZHIPU_API_KEY` to repository secrets → Push → Done!
+
+The system will automatically scan your codebase and generate the architecture.
+
+---
+
+### Option A: Manual Setup in This Repository (Standalone)
 
 Add your Zhipu AI API key to your GitHub repository secrets:
 
@@ -100,10 +125,11 @@ Plus, add an `architecture.yaml` file to describe your system.
 .
 ├── architecture.yaml                          # System architecture description
 ├── scripts/
-│   └── auto_threat_model.py                  # Threat modeling script
+│   ├── auto_threat_model.py                  # Main threat modeling script
+│   └── auto_generate_arch.py                 # Auto-discovery script (NEW!)
 ├── .github/workflows/
 │   ├── threat-modeling.yml                   # Standalone workflow
-│   └── threat-modeling-reusable.yml          # Reusable workflow (for multi-repo)
+│   └── threat-modeling-reusable.yml          # Reusable workflow with auto-discovery
 ├── examples/
 │   ├── workflow-example.yml                  # Example workflow for other repos
 │   └── architecture-example.yaml             # Architecture template
@@ -115,15 +141,23 @@ Plus, add an `architecture.yaml` file to describe your system.
 
 ## Components
 
+### auto_generate_arch.py (NEW!)
+
+**Auto-discovery script** that reverse-engineers your architecture from code:
+
+- Scans repository for configuration files
+- Detects: package.json, requirements.txt, Dockerfile, k8s, Terraform, etc.
+- Identifies tech stack and frameworks
+- Uses Zhipu AI to generate architecture.yaml
+- No manual setup required!
+
+**Usage:**
+```bash
+export ZHIPU_API_KEY="your_key"
+python scripts/auto_generate_arch.py
+```
+
 ### architecture.yaml
-
-Describes your system's:
-- **Components**: Services, databases, APIs, etc.
-- **Data Flows**: How data moves between components
-- **Trust Boundaries**: Security zones (Internet, DMZ, Private Network)
-- **Security Context**: Compliance requirements, assumptions
-
-### auto_threat_model.py
 
 Python script that:
 1. Loads and parses `architecture.yaml`

@@ -7,10 +7,64 @@ This guide explains how to use the centralized Threat Modeling as Code workflow 
 The **reusable workflow** approach allows you to:
 - Maintain threat modeling logic in ONE place (TMm_sCaN repo)
 - Use it across unlimited repositories
+- **Auto-discover architecture from code** (no manual setup needed!)
 - Update all repos by updating the central workflow
-- Keep custom architecture.yaml in each repo
+- Keep custom architecture.yaml in each repo (optional)
 
-## 📋 Quick Start (3 Steps)
+## 🚀 Two Ways to Use
+
+### Option A: **Auto-Discovery** (Simplest - No Setup Required!)
+**Recommended for quick starts** - The system automatically scans your codebase and generates the architecture file.
+
+### Option B: **Manual Architecture** (Best for Accuracy)
+**Best for production** - You write the architecture.yaml file for precise control.
+
+---
+
+## 📋 Quick Start - Auto-Discovery (2 Steps!)
+
+This is the **simplest** way to add threat modeling to any repository.
+
+### Step 1: Add the Workflow
+
+Create `.github/workflows/threat-modeling.yml` in your repository:
+
+```yaml
+name: Threat Modeling
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+  workflow_dispatch:
+
+jobs:
+  threat-modeling:
+    uses: yantongggg/TMm_sCaN/.github/workflows/threat-modeling-reusable.yml@master
+    with:
+      auto_discovery: true  # Enable auto-discovery!
+    secrets:
+      zhipu_api_key: ${{ secrets.ZHIPU_API_KEY }}
+```
+
+### Step 2: Add API Key
+
+Go to: **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
+- Name: `ZHIPU_API_KEY`
+- Value: Your Zhipu AI API key from https://open.bigmodel.cn/
+
+### That's It!
+
+Push and the workflow will:
+1. ✅ Scan your codebase (`package.json`, `requirements.txt`, Docker files, etc.)
+2. ✅ Use AI to auto-generate `architecture.yaml`
+3. ✅ Perform STRIDE threat modeling
+4. ✅ Report results with PR comments
+
+---
+
+## 📋 Manual Setup (3 Steps)
 
 ### Step 1: Add Workflow to Your Repository
 
@@ -85,10 +139,34 @@ The reusable workflow accepts these optional parameters:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
+| `auto_discovery` | `true` | Automatically generate architecture.yaml if not found |
 | `architecture_path` | `architecture.yaml` | Path to your architecture file |
 | `output_path` | `threat_report.xml` | Where to save the report |
 | `python_version` | `3.11` | Python version to use |
 | `fail_on_high_severity` | `true` | Fail build on Critical/High threats |
+
+### Auto-Discovery Details
+
+When `auto_discovery: true` (default):
+
+1. **First Run** (no `architecture.yaml`):
+   - Scans codebase for configuration files
+   - Detects: package.json, requirements.txt, Dockerfile, k8s manifests, Terraform, etc.
+   - Uses AI to reverse-engineer architecture
+   - Generates `architecture.yaml` automatically
+   - Performs threat modeling on generated architecture
+   - Uploads both as artifacts
+
+2. **Subsequent Runs** (with `architecture.yaml`):
+   - Uses existing `architecture.yaml`
+   - Skips auto-discovery
+   - Runs threat modeling directly
+
+**To disable auto-discovery:**
+```yaml
+with:
+  auto_discovery: false  # Use existing architecture.yaml only
+```
 
 ### Example with Custom Parameters
 
@@ -117,6 +195,7 @@ The reusable workflow provides outputs you can use in other jobs:
 | `critical_count` | Number of Critical severity threats |
 | `high_count` | Number of High severity threats |
 | `has_blocking_threats` | `true` if Critical or High threats exist |
+| `architecture_generated` | `true` if architecture was auto-discovered |
 
 ### Using Outputs in Your Workflow
 

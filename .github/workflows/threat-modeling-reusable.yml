@@ -1,13 +1,17 @@
-name: Reusable Threat Modeling Workflow
+name: Reusable Threat Modeling Workflow with Auto-Discovery
 
 # Reusable workflow that can be called from other repositories
-# Usage: See .github/workflows/call-threat-modeling-example.yml
+# Features:
+# - Auto-discovers architecture if architecture.yaml doesn't exist
+# - Performs STRIDE threat modeling using Zhipu AI
+# - Returns outputs (threat counts, blocking status)
+# - Comments on PRs with results
 
 on:
   workflow_call:
     inputs:
       architecture_path:
-        description: 'Path to architecture.yaml file in the caller repository'
+        description: 'Path to architecture.yaml file (auto-generated if not found)'
         required: false
         type: string
         default: 'architecture.yaml'
@@ -21,6 +25,11 @@ on:
         required: false
         type: string
         default: '3.11'
+      auto_discovery:
+        description: 'Auto-generate architecture.yaml if not found (true/false)'
+        required: false
+        type: boolean
+        default: true
       fail_on_high_severity:
         description: 'Whether to fail the workflow on Critical/High threats'
         required: false
@@ -43,11 +52,14 @@ on:
       has_blocking_threats:
         description: 'Whether Critical or High threats were found'
         value: ${{ jobs.threat-modeling.outputs.has_blocking_threats }}
+      architecture_generated:
+        description: 'Whether architecture.yaml was auto-generated'
+        value: ${{ jobs.threat-modeling.outputs.architecture_generated }}
 
 permissions:
   contents: read
   pull-requests: write
-  actions: write  # For uploading artifacts
+  actions: write
 
 jobs:
   threat-modeling:
@@ -58,6 +70,7 @@ jobs:
       critical_count: ${{ steps.parse_report.outputs.critical_count }}
       high_count: ${{ steps.parse_report.outputs.high_count }}
       has_blocking_threats: ${{ steps.check_severity.outputs.has_blocking_threats }}
+      architecture_generated: ${{ steps.auto_discover.outputs.generated }}
 
     steps:
       - name: Checkout caller repository
@@ -83,23 +96,81 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r threat-modeling-repo/requirements.txt
 
+      # === Auto-Discovery Step ===
+      - name: Auto-discover architecture (if needed)
+        id: auto_discover
+        if: ${{ inputs.auto_discovery }}
+        env:
+          ZHIPU_API_KEY: ${{ secrets.zhipu_api_key }}
+          ARCHITECTURE_PATH: ${{ inputs.architecture_path }}
+        run: |
+          cd caller-repo
+
+          if [ -f "${{ inputs.architecture_path }}" ]; then
+            echo "✅ Found existing architecture.yaml"
+            echo "generated=false" >> $GITHUB_OUTPUT
+            echo "ARCH_FILE=${{ inputs.architecture_path }}" >> $GITHUB_ENV
+          else
+            echo "⚠️  No architecture.yaml found - running auto-discovery..."
+            echo "📂 Analyzing codebase structure..."
+            echo "🤖 Using AI to reverse-engineer architecture..."
+
+            python ../threat-modeling-repo/scripts/auto_generate_arch.py
+
+            if [ -f "architecture.yaml" ]; then
+              echo "✅ Successfully generated architecture.yaml"
+              echo "generated=true" >> $GITHUB_OUTPUT
+              echo "ARCH_FILE=architecture.yaml" >> $GITHUB_ENV
+
+              # Show preview
+              echo ""
+              echo "📄 Generated architecture (preview):"
+              echo "---"
+              head -30 architecture.yaml
+              echo "---"
+              echo ""
+            else
+              echo "❌ Failed to generate architecture.yaml"
+              exit 1
+            fi
+          fi
+
       - name: Verify architecture file exists
+        if: ${{ !inputs.auto_discovery || steps.auto_discover.outputs.generated == 'false' }}
         run: |
           if [ ! -f "caller-repo/${{ inputs.architecture_path }}" ]; then
             echo "❌ Error: Architecture file not found at caller-repo/${{ inputs.architecture_path }}"
-            echo "Please create an architecture.yaml file in your repository."
-            echo "You can copy the example from: threat-modeling-repo/architecture.yaml"
+            echo ""
+            echo "💡 Solutions:"
+            echo "   1. Enable auto_discovery: true in workflow inputs"
+            echo "   2. Create an architecture.yaml file in your repository"
+            echo "   3. Copy the template from: threat-modeling-repo/examples/architecture-example.yaml"
+            echo ""
             exit 1
           fi
           echo "✓ Architecture file found: ${{ inputs.architecture_path }}"
+
+      - name: Set architecture path
+        id: set_arch_path
+        run: |
+          if [ "${{ steps.auto_discover.outputs.generated }}" = "true" ]; then
+            echo "path=caller-repo/architecture.yaml" >> $GITHUB_OUTPUT
+          elif [ -f "caller-repo/${{ inputs.architecture_path }}" ]; then
+            echo "path=caller-repo/${{ inputs.architecture_path }}" >> $GITHUB_OUTPUT
+          else
+            echo "path=${{ inputs.architecture_path }}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Run automated threat modeling
         id: threat_model
         env:
           ZHIPU_API_KEY: ${{ secrets.zhipu_api_key }}
-          ARCHITECTURE_FILE: ${{ github.workspace }}/caller-repo/${{ inputs.architecture_path }}
+          ARCHITECTURE_FILE: ${{ github.workspace }}/${{ steps.set_arch_path.outputs.path }}
           OUTPUT_FILE: ${{ github.workspace }}/${{ inputs.output_path }}
         run: |
+          echo "🔍 Running STRIDE threat modeling..."
+          echo "   Architecture: $ARCHITECTURE_FILE"
+          echo "   Output: $OUTPUT_FILE"
           python threat-modeling-repo/scripts/auto_threat_model.py
         continue-on-error: true
 
@@ -149,6 +220,14 @@ jobs:
           path: ${{ inputs.output_path }}
           retention-days: 90
 
+      - name: Upload generated architecture (if auto-discovered)
+        uses: actions/upload-artifact@v4
+        if: ${{ steps.auto_discover.outputs.generated == 'true' }}
+        with:
+          name: auto-generated-architecture-${{ github.run_number }}
+          path: caller-repo/architecture.yaml
+          retention-days: 90
+
       - name: Fail build if blocking threats found
         if: ${{ inputs.fail_on_high_severity && steps.check_severity.outputs.has_blocking_threats == 'true' }}
         run: |
@@ -169,9 +248,15 @@ jobs:
             const threatCount = '${{ steps.parse_report.outputs.threat_count }}';
             const criticalCount = '${{ steps.parse_report.outputs.critical_count }}';
             const highCount = '${{ steps.parse_report.outputs.high_count }}';
+            const autoGenerated = '${{ steps.auto_discover.outputs.generated }}' === 'true';
 
             body += '## 🔒 Threat Modeling Results\n\n';
-            body += `**Architecture File**: \`${{ inputs.architecture_path }}\`\n\n`;
+
+            if (autoGenerated) {
+              body += '### 🤖 Auto-Discovery\n\n';
+              body += '⚡ `architecture.yaml` was automatically generated from your codebase.\n\n';
+              body += '**Recommendation:** Download the `auto-generated-architecture-${{ github.run_number }}` artifact, review it, and commit it to your repository for future runs.\n\n';
+            }
 
             if (hasBlocking) {
               body += '### ⚠️ Action Required\n\n';
@@ -210,12 +295,18 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Architecture Source** | ${{ steps.auto_discover.outputs.generated == 'true' && '🤖 Auto-Generated' || '📄 Repository File' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Status** | ${{ steps.threat_model.outcome }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Architecture File** | \`${{ inputs.architecture_path }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Total Threats** | ${{ steps.parse_report.outputs.threat_count }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Critical** | ${{ steps.parse_report.outputs.critical_count }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **High** | ${{ steps.parse_report.outputs.high_count }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📥 Download the Threat Report" >> $GITHUB_STEP_SUMMARY
+          echo "### 📥 Download Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Download the detailed XML report from the workflow artifacts." >> $GITHUB_STEP_SUMMARY
+          echo "- **Threat Report**: `threat-report-${{ github.run_number }}`" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.auto_discover.outputs.generated }}" = "true" ]; then
+            echo "- **Generated Architecture**: `auto-generated-architecture-${{ github.run_number }}`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "💡 **Tip**: Review and commit the generated architecture.yaml for future runs!" >> $GITHUB_STEP_SUMMARY
+          fi

@@ -1,76 +1,133 @@
 # ============================================================================
-# EXAMPLE: How to call the Threat Modeling workflow from YOUR repository
+# EXAMPLE: How to use Threat Modeling with AUTO-DISCOVERY
 # ============================================================================
-
-# Step 1: Copy this file to YOUR repository at:
-#         .github/workflows/threat-modeling.yml
 #
-# Step 2: Create an architecture.yaml file in YOUR repository root
-#         (See architecture-example.yaml for reference)
+# This is the SIMPLEST way to add threat modeling to your repository.
 #
-# Step 3: Add ZHIPU_API_KEY to YOUR repository secrets:
-#         Go to: Settings → Secrets and variables → Actions → New repository secret
-#         Name: ZHIPU_API_KEY
-#         Value: your_zhipu_api_key_here
+# With auto-discovery enabled, you don't even need to create architecture.yaml!
+# The system will:
+# 1. Scan your codebase
+# 2. Detect your tech stack (from package.json, requirements.txt, etc.)
+# 3. Use AI to generate architecture.yaml automatically
+# 4. Perform STRIDE threat modeling
+# 5. Report results
 #
-# Step 4: Commit and push - the workflow will run automatically!
+# ============================================================================
 
 name: Threat Modeling
 
-# Trigger on push to main/master and on all pull requests
 on:
   push:
-    branches:
-      - main
-      - master
-      - develop
+    branches: [main, master, develop]
   pull_request:
-    branches:
-      - main
-      - master
-      - develop
-  workflow_dispatch:  # Allow manual triggering
+    branches: [main, master, develop]
+  workflow_dispatch:
 
 jobs:
-  # Call the reusable workflow from TMm_sCaN repository
-  threat-modeling:
-    name: Run Threat Modeling
+  # === OPTION 1: FULL AUTO-DISCOVERY (Simplest) ===
+  # Use this if you want the system to automatically discover your architecture
+  threat-modeling-auto:
+    name: Auto-Discovery Threat Modeling
     uses: yantongggg/TMm_sCaN/.github/workflows/threat-modeling-reusable.yml@master
     with:
-      # Optional: Specify custom architecture file path (default: 'architecture.yaml')
+      # auto_discovery: true is the default - enables automatic architecture generation
+      auto_discovery: true
+
+      # Optional: customize paths (defaults shown)
       architecture_path: 'architecture.yaml'
-
-      # Optional: Specify custom output path (default: 'threat_report.xml')
       output_path: 'threat_report.xml'
-
-      # Optional: Python version (default: '3.11')
       python_version: '3.11'
 
-      # Optional: Fail build on Critical/High threats (default: true)
+      # Optional: fail build on Critical/High threats (default: true)
       fail_on_high_severity: true
 
     secrets:
-      # Pass your Zhipu AI API key from your repository secrets
       zhipu_api_key: ${{ secrets.ZHIPU_API_KEY }}
 
-  # Example job that uses the outputs from threat modeling
-  # This job only runs if threat modeling succeeds
-  post-processing:
-    name: Process Threat Model Results
-    needs: threat-modeling
-    runs-on: ubuntu-latest
-    if: ${{ always() }}
-    steps:
-      - name: Check threat results
-        run: |
-          echo "Threat Model Results:"
-          echo "  Total Threats: ${{ needs.threat-modeling.outputs.threat_count }}"
-          echo "  Critical: ${{ needs.threat-modeling.outputs.critical_count }}"
-          echo "  High: ${{ needs.threat-modeling.outputs.high_count }}"
-          echo "  Has Blocking: ${{ needs.threat-modeling.outputs.has_blocking_threats }}"
+  # === OPTION 2: USE EXISTING ARCHITECTURE (If you have one) ===
+  # If you already have an architecture.yaml file, disable auto-discovery:
+  # threat-modeling-manual:
+  #   name: Manual Architecture Threat Modeling
+  #   uses: yantongggg/TMm_sCaN/.github/workflows/threat-modeling-reusable.yml@master
+  #   with:
+  #     auto_discovery: false  # Don't auto-generate, use existing file
+  #     architecture_path: 'docs/my-architecture.yaml'  # Custom path
+  #   secrets:
+  #     zhipu_api_key: ${{ secrets.ZHIPU_API_KEY }}
 
-          if [ "${{ needs.threat-modeling.outputs.has_blocking_threats }}" = "true" ]; then
-            echo "⚠️  Blocking threats detected - review required!"
-          else
-            echo "✅ No blocking threats - good to go!"
-          fi
+# ============================================================================
+# SETUP INSTRUCTIONS:
+# ============================================================================
+#
+# Step 1: Add this file to your repository
+#   Location: .github/workflows/threat-modeling.yml
+#
+# Step 2: Add Zhipu AI API key to your repository secrets
+#   Go to: Settings → Secrets and variables → Actions → New repository secret
+#   Name: ZHIPU_API_KEY
+#   Value: Your Zhipu AI API key from https://open.bigmodel.cn/
+#
+# Step 3: Commit and push
+#   git add .github/workflows/threat-modeling.yml
+#   git commit -m "Add automated threat modeling"
+#   git push
+#
+# That's it! The workflow will run automatically.
+#
+# ============================================================================
+# WHAT HAPPENS:
+# ============================================================================
+#
+# First Run (No architecture.yaml):
+#   1. Workflow checks for architecture.yaml
+#   2. Not found → Runs auto-discovery
+#   3. Scans your codebase for:
+#      - package.json, requirements.txt, pom.xml, etc.
+#      - Dockerfile, docker-compose.yml
+#      - Kubernetes manifests
+#      - Terraform files
+#   4. Sends analysis to Zhipu AI
+#   5. AI generates architecture.yaml
+#   6. Performs threat modeling on generated architecture
+#   7. Uploads both as artifacts
+#
+# Subsequent Runs (With architecture.yaml):
+#   1. Finds existing architecture.yaml
+#   2. Skips auto-discovery
+#   3. Performs threat modeling directly
+#
+# ============================================================================
+# TIPS:
+# ============================================================================
+#
+# 1. After first run, download the auto-generated architecture.yaml artifact
+# 2. Review and edit it to add more details
+# 3. Commit it to your repository for faster subsequent runs
+# 4. Set auto_discovery: false once you have a good architecture.yaml
+#
+# ============================================================================
+# ADVANCED: Use workflow outputs
+# ============================================================================
+#
+# You can access threat modeling results in other jobs:
+#
+# notify-team:
+#   needs: threat-modeling-auto
+#   if: ${{ needs.threat-modeling-auto.outputs.has_blocking_threats == 'true' }}
+#   runs-on: ubuntu-latest
+#   steps:
+#     - name: Send alert
+#       run: |
+#         echo "Critical threats found!"
+#         echo "Total: ${{ needs.threat-modeling-auto.outputs.threat_count }}"
+#         echo "Critical: ${{ needs.threat-modeling-auto.outputs.critical_count }}"
+#         echo "High: ${{ needs.threat-modeling-auto.outputs.high_count }}"
+#
+# Available outputs:
+#   - threat_count: Total number of threats
+#   - critical_count: Number of Critical threats
+#   - high_count: Number of High threats
+#   - has_blocking_threats: true if Critical or High found
+#   - architecture_generated: true if auto-discovery was used
+#
+# ============================================================================
