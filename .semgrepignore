@@ -1,0 +1,114 @@
+# Semgrep ignore patterns
+# Files and directories matching these patterns will be excluded from SAST scanning
+
+# Test files and test data
+**/test/
+**/tests/
+**/__tests__/
+**/*.test.js
+**/*.test.ts
+**/*.test.py
+**/*.spec.js
+**/*.spec.ts
+**/*.spec.py
+**/*_test.go
+
+# Vulnerable code examples (intentionally insecure for testing)
+examples/vulnerable_code/
+**/test_vulnerabilities.py
+**/test_vulnerabilities.js
+
+# Dependencies
+**/node_modules/
+**/venv/
+**/.venv/
+**/virtualenv/
+**/env/
+**/.env
+**/vendor/
+**/third_party/
+
+# Build artifacts and generated code
+**/dist/
+**/build/
+**/out/
+**/target/
+**/bin/
+**/obj/
+**/*.generated.js
+**/*.generated.ts
+**/*.generated.py
+**/*.pb.go
+
+# Documentation
+**/docs/
+**/*.md
+**/*.rst
+**/*.txt
+
+# Configuration files
+**/*.yml
+**/*.yaml
+**/*.json
+**/*.toml
+**/*.ini
+**/*.cfg
+**/*.conf
+**/.gitignore
+**/.semgrepignore
+
+# Database files
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+
+# Log files
+**/*.log
+
+# Temporary and cache files
+**/.cache/
+**/tmp/
+**/temp/
+**/*.tmp
+**/*.swp
+**/*.swo
+
+# CI/CD configuration
+.github/
+.gitlab-ci.yml
+.travis.yml
+azure-pipelines.yml
+
+# Security scanning reports (don't scan the reports!)
+threat_report.xml
+sast_report.xml
+security_report.xml
+dependency-check-report.html
+
+# Example files and samples
+**/example/
+**/examples/
+**/sample/
+**/samples/
+
+# Migration files (typically contain SQL but are structural)
+**/migrations/
+
+# Seed data files
+**/seeds/
+**/fixtures/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.iml
+.editorconfig
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Third-party integrations that can be safely ignored
+**/third-party/
+**/external/
+**/lib/

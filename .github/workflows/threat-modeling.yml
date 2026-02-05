@@ -19,6 +19,9 @@ permissions:
   contents: read
   pull-requests: write
 
+env:
+  SECURITY_MODE: audit  # 'audit' (non-blocking) or 'block' (fail on Critical/High)
+
 jobs:
   threat-modeling:
     name: Automated STRIDE Threat Modeling
@@ -57,38 +60,174 @@ jobs:
           path: threat_report.xml
           retention-days: 90
 
-      - name: Check for Critical/High threats
-        if: steps.threat_model.outcome == 'failure'
-        run: |
-          echo "❌ Security threats detected that require attention!"
-          echo "Please review the uploaded threat_report.xml artifact."
-          exit 1
+  sast-scan:
+    name: SAST Scan (Semgrep)
+    runs-on: ubuntu-latest
 
-      - name: Comment PR with threat summary (optional)
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml
+
+      - name: Run Semgrep
+        id: semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: auto
+          output: semgrep-results.json
+          severity: ERROR  # Focus on high-severity findings
+        continue-on-error: true
+
+      - name: Parse SAST results
+        env:
+          SEMGREP_RESULTS_PATH: ${{ github.workspace }}/semgrep-results.json
+          SAST_OUTPUT_PATH: ${{ github.workspace }}/sast_report.xml
+        run: |
+          python scripts/parse_sast_results.py
+        continue-on-error: true
+
+      - name: Upload SAST results artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sast-report-${{ github.run_number }}
+          path: |
+            semgrep-results.json
+            sast_report.xml
+          retention-days: 90
+
+      - name: Upload threat report artifact
+        uses: actions/upload-artifact@v4
+        if: always()  # Upload even if previous steps failed
+        with:
+          name: threat-report-${{ github.run_number }}
+          path: threat_report.xml
+          retention-days: 90
+
+  aggregate-reports:
+    name: Aggregate Security Reports
+    needs: [threat-modeling, sast-scan]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml
+
+      - name: Download threat report artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: threat-report-${{ github.run_number }}
+          path: ${{ github.workspace }}
+        continue-on-error: true
+
+      - name: Download SAST report artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sast-report-${{ github.run_number }}
+          path: ${{ github.workspace }}
+        continue-on-error: true
+
+      - name: Aggregate security results
+        env:
+          DESIGN_REPORT_PATH: ${{ github.workspace }}/threat_report.xml
+          SAST_REPORT_PATH: ${{ github.workspace }}/sast_report.xml
+          UNIFIED_REPORT_PATH: ${{ github.workspace }}/security_report.xml
+          SECURITY_MODE: ${{ env.SECURITY_MODE }}
+        run: |
+          python scripts/aggregate_security_results.py
+        continue-on-error: true
+
+      - name: Upload unified security report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-report-${{ github.run_number }}
+          path: security_report.xml
+          retention-days: 90
+
+      - name: Check for Critical/High findings
+        if: always()
+        run: |
+          python scripts/check_security_severity.py
+
+      - name: Comment PR with unified summary
         if: github.event_name == 'pull_request' && always()
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            let body = '';
-            let outcome = '${{ steps.threat_model.outcome }}';
+            let body = '## 🔒 Unified Security Assessment Results\n\n';
 
-            if (outcome === 'failure') {
-              body = '## 🔒 Threat Modeling Results\n\n';
-              body += '⚠️ **Critical or High severity threats were detected!**\n\n';
-              body += 'The automated STRIDE threat modeling has identified security concerns that must be addressed before merging.\n\n';
-              body += '📋 **Next Steps:**\n';
-              body += '1. Download the `threat-report-${{ github.run_number }}` artifact from the workflow run\n';
-              body += '2. Review the identified threats in detail\n';
-              body += '3. Implement the recommended mitigations\n';
-              body += '4. Re-run this workflow after making changes\n\n';
+            try {
+              if (fs.existsSync('security_report.xml')) {
+                const xml = fs.readFileSync('security_report.xml', 'utf8');
+                // Simple parse to extract summary
+                const totalMatch = xml.match(/<TotalThreats>(\d+)<\/TotalThreats>/);
+                const criticalMatch = xml.match(/<CriticalCount>(\d+)<\/CriticalCount>/);
+                const highMatch = xml.match(/<HighCount>(\d+)<\/HighCount>/);
+                const mediumMatch = xml.match(/<MediumCount>(\d+)<\/MediumCount>/);
+                const lowMatch = xml.match(/<LowCount>(\d+)<\/LowCount>/);
+                const designMatch = xml.match(/<DesignThreats>(\d+)<\/DesignThreats>/);
+                const codeMatch = xml.match(/<CodeThreats>(\d+)<\/CodeThreats>/);
+
+                const total = totalMatch ? totalMatch[1] : '0';
+                const critical = criticalMatch ? criticalMatch[1] : '0';
+                const high = highMatch ? highMatch[1] : '0';
+                const medium = mediumMatch ? mediumMatch[1] : '0';
+                const low = lowMatch ? lowMatch[1] : '0';
+                const design = designMatch ? designMatch[1] : '0';
+                const code = codeMatch ? codeMatch[1] : '0';
+
+                if (parseInt(critical) > 0 || parseInt(high) > 0) {
+                  body += '⚠️ **Critical or High severity findings detected!**\n\n';
+                } else {
+                  body += '✅ **No Critical or High severity findings**\n\n';
+                }
+
+                body += '### Summary\n';
+                body += `- **Total Findings:** ${total}\n`;
+                body += `- **Critical:** ${critical}\n`;
+                body += `- **High:** ${high}\n`;
+                body += `- **Medium:** ${medium}\n`;
+                body += `- **Low:** ${low}\n\n`;
+                body += '### Breakdown by Source\n';
+                body += `- **Design-Level Threats (STRIDE):** ${design}\n`;
+                body += `- **Code-Level Threats (SAST):** ${code}\n\n`;
+              } else {
+                body += '⚠️ Could not generate unified report\n\n';
+              }
+
+              body += '📄 **Reports Available:**\n';
+              body += `- **Unified Report:** \`security-report-${{ github.run_number }}\`\n`;
+              body += `- **Design Threats:** \`threat-report-${{ github.run_number }}\`\n`;
+              body += `- **SAST Scan:** \`sast-report-${{ github.run_number }}\`\n\n`;
               body += '---\n';
               body += '*This comment was automatically generated by the Threat Modeling as Code pipeline.*';
-            } else {
-              body = '## 🔒 Threat Modeling Results\n\n';
-              body += '✅ **No Critical or High severity threats detected!**\n\n';
-              body += 'The automated STRIDE threat modeling completed successfully.\n\n';
-              body += '📄 The detailed threat report is available in the workflow artifacts.\n\n';
+            } catch (error) {
+              body += '⚠️ Could not parse security results\n\n';
+              body += 'Please check the workflow logs for details.\n\n';
               body += '---\n';
               body += '*This comment was automatically generated by the Threat Modeling as Code pipeline.*';
             }
@@ -103,13 +242,16 @@ jobs:
       - name: Job summary
         if: always()
         run: |
-          echo "## 🔒 Threat Modeling Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔒 Unified Security Assessment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status**: ${{ steps.threat_model.outcome }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Architecture File**: architecture.yaml" >> $GITHUB_STEP_SUMMARY
-          echo "- **Report Artifact**: threat-report-${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Workflow Run**: #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Mode:** ${{ env.SECURITY_MODE }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Threat Modeling:** ${{ needs.threat-modeling.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **SAST Scan:** ${{ needs.sast-scan.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Unified Report:** security-report-${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📥 Download the Threat Report" >> $GITHUB_STEP_SUMMARY
+          echo "### 📥 Download Reports" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Download the detailed XML report from the workflow artifacts at the bottom of this page." >> $GITHUB_STEP_SUMMARY
+          echo "Download detailed reports from the workflow artifacts:" >> $GITHUB_STEP_SUMMARY
+          echo "- Unified security report (combined design + code)" >> $GITHUB_STEP_SUMMARY
+          echo "- Design-level threat model (STRIDE)" >> $GITHUB_STEP_SUMMARY
+          echo "- Code-level SAST scan (Semgrep)" >> $GITHUB_STEP_SUMMARY

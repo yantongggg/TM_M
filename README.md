@@ -1,21 +1,40 @@
 # Threat Modeling as Code (TMaC)
 
-Automated STRIDE threat modeling pipeline integrated into CI/CD using Zhipu AI.
+Automated STRIDE threat modeling and SAST security scanning pipeline integrated into CI/CD.
 
 ## Overview
 
-This project implements a "Threat Modeling as Code" approach that automatically analyzes your system architecture for security threats during the CI/CD pipeline. It uses the **STRIDE methodology** (Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, Elevation of Privilege) powered by Zhipu AI's LLM to identify potential security vulnerabilities.
+This project implements a comprehensive "Security as Code" approach that combines:
+- **Design-level threat modeling** using STRIDE methodology (Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, Elevation of Privilege)
+- **Code-level static analysis** using Semgrep SAST (SQL injection, XSS, command injection, etc.)
+
+Both security layers run in parallel during CI/CD and generate unified security reports.
 
 ## Features
 
 - **🤖 Auto-Discovery**: Automatically scans codebase and generates architecture.yaml
 - **Automated STRIDE Analysis**: Leverages AI to systematically identify threats across all STRIDE categories
+- **🔍 SAST Code Scanning**: Static code analysis using Semgrep for implementation vulnerabilities
+- **Unified Security Reports**: Merges design and code findings into single report
 - **CI/CD Integration**: GitHub Actions workflow that runs on every PR and push
-- **Build Breaking**: Automatically fails builds when Critical or High severity threats are detected
+- **Dual Operating Modes**: Audit mode (non-blocking) and Block mode (fail on Critical/High)
 - **Structured XML Reports**: Generates detailed, machine-readable threat reports
 - **YAML-based Architecture**: Simple, declarative format for describing your system
-- **PR Comments**: Automatically comments on PRs with threat summary
-- **Artifact Storage**: Threat reports stored as workflow artifacts
+- **PR Comments**: Automatically comments on PRs with security summary
+- **Artifact Storage**: Security reports stored as workflow artifacts
+
+## 🆕 Security Scanning
+
+This repository now includes comprehensive security scanning with:
+
+- **Semgrep (SAST)**: Static code analysis for SQL injection, XSS, command injection, hardcoded secrets, and more
+- **Unified Reports**: Combined design-level and code-level findings in one report
+- **Audit/Block Modes**: Start with non-blocking audits, graduate to security enforcement
+
+**📖 Documentation:**
+- **[Quick Start Guide](QUICK_START_SAST.md)** - Get started in 5 minutes
+- **[Security Scanning Guide](SECURITY_SCAN_README.md)** - Comprehensive documentation (vulnerabilities, fixes, graduation checklist)
+- **[Implementation Summary](IMPLEMENTATION_SUMMARY.md)** - Technical details and architecture
 
 ## 🚀 Quick Start
 
@@ -126,17 +145,26 @@ Plus, add an `architecture.yaml` file to describe your system.
 ├── architecture.yaml                          # System architecture description
 ├── scripts/
 │   ├── auto_threat_model.py                  # Main threat modeling script
-│   └── auto_generate_arch.py                 # Auto-discovery script (NEW!)
+│   ├── auto_generate_arch.py                 # Auto-discovery script
+│   ├── parse_sast_results.py                 # Parse Semgrep results to XML
+│   ├── aggregate_security_results.py         # Merge design + code findings
+│   └── check_security_severity.py            # Check severity for CI exit code
 ├── .github/workflows/
-│   ├── threat-modeling.yml                   # Standalone workflow
+│   ├── threat-modeling.yml                   # Combined STRIDE + SAST workflow
+│   ├── security-scan.yml                     # SAST-only workflow
 │   └── threat-modeling-reusable.yml          # Reusable workflow with auto-discovery
 ├── examples/
 │   ├── workflow-example.yml                  # Example workflow for other repos
 │   └── architecture-example.yaml             # Architecture template
+├── .semgrepignore                            # SAST exclusion patterns
 ├── requirements.txt                           # Python dependencies
 ├── README.md                                  # This file
+├── SECURITY_SCAN_README.md                   # Comprehensive security scanning guide
 ├── USAGE.md                                   # Guide for using across multiple repos
-└── threat_report.xml                         # Generated threat report (after CI run)
+└── (Generated reports)
+    ├── threat_report.xml                     # Design-level threats (STRIDE)
+    ├── sast_report.xml                       # Code-level threats (Semgrep)
+    └── security_report.xml                   # Unified security report
 ```
 
 ## Components
@@ -203,12 +231,18 @@ python scripts/auto_threat_model.py
 
 ## Threat Severity Levels
 
-| Severity | Description | Build Behavior |
-|----------|-------------|----------------|
+| Severity | Description | Build Behavior (Block Mode) |
+|----------|-------------|----------------------------|
 | **Critical** | Direct path to data breach or critical compromise | Fails build ❌ |
 | **High** | Significant security impact with realistic exploit | Fails build ❌ |
 | **Medium** | Moderate impact or lower likelihood | Passes build ⚠️ |
 | **Low** | Minor issues or theoretical threats | Passes build ⚠️ |
+
+**Note:** The pipeline can operate in two modes:
+- **Audit Mode** (default): Reports findings but never fails the build
+- **Block Mode**: Fails build on Critical/High severity findings
+
+See [SECURITY_SCAN_README.md](SECURITY_SCAN_README.md) for details on operating modes.
 
 ## Sample Output
 
@@ -243,10 +277,13 @@ The generated XML report includes:
 
 ### Results
 
-- **GitHub Artifacts**: Download `threat-report-{run_number}` for the full XML
+- **GitHub Artifacts**: Download reports for full details
+  - `security-report-{run_number}` - Unified report (design + code)
+  - `threat-report-{run_number}` - Design-level threats only
+  - `sast-report-{run_number}` - Code-level threats only
 - **PR Comments**: Automatic summary comment on pull requests
 - **Job Summary**: Summary available in the workflow run page
-- **Build Status**: ❌ Fails if Critical/High threats found
+- **Build Status**: Depends on `SECURITY_MODE` (audit/block)
 
 ## Configuration
 
@@ -278,7 +315,16 @@ Modify `_build_system_prompt()` in `auto_threat_model.py` to customize:
 2. **Review Medium/Low Threats**: Even non-blocking threats should be reviewed
 3. **Iterate**: Update architecture and re-run after implementing mitigations
 4. **Team Collaboration**: Discuss findings in security reviews
-5. **False Positives**: If you encounter false positives, refine the architecture description
+5. **False Positives**: Use `.semgrepignore` or inline comments for code findings
+6. **Start in Audit Mode**: Use non-blocking mode initially, graduate to block mode
+7. **Document Accepted Risks**: Create GitHub issues for accepted security risks
+8. **Fix Implementation Bugs**: Prioritize SAST findings (real vulnerabilities)
+9. **Address Design Issues**: Plan architectural improvements for STRIDE threats
+
+**See [SECURITY_SCAN_README.md](SECURITY_SCAN_README.md) for:**
+- How to fix common vulnerabilities (SQL injection, XSS, etc.)
+- Suppressing false positives
+- Graduation checklist from audit to block mode
 
 ## Security Considerations
 
