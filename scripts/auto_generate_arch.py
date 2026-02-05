@@ -406,7 +406,7 @@ Generate the complete architecture.yaml file now based on this codebase analysis
     print("\n[4/4] Generating architecture.yaml with AI...")
     try:
         response = client.chat.completions.create(
-            model="glm-4",
+            model="glm-4.5",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
