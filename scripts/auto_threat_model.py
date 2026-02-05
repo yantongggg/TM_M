@@ -160,7 +160,7 @@ Generate the complete XML threat model following the specified format."""
 
         try:
             response = self.client.chat.completions.create(
-                model="glm-4.5",  # Using GLM-4.5 model
+                model="glm-4-plus",  # Using GLM-4-Plus model
                 messages=[
                     {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": user_prompt}
