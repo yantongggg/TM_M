@@ -161,6 +161,20 @@ jobs:
             echo "path=${{ inputs.architecture_path }}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Verify architecture file before threat modeling
+        run: |
+          echo "🔍 Verifying architecture file..."
+          arch_path="${{ steps.set_arch_path.outputs.path }}"
+          if [ ! -f "$arch_path" ]; then
+            echo "❌ Error: Architecture file not found at $arch_path"
+            echo "Looking for files in caller-repo:"
+            find caller-repo -name "*.yaml" -o -name "*.yml" || true
+            exit 1
+          fi
+          echo "✓ Architecture file exists: $arch_path"
+          echo "Preview (first 20 lines):"
+          head -20 "$arch_path"
+
       - name: Run automated threat modeling
         id: threat_model
         env:
@@ -171,8 +185,14 @@ jobs:
           echo "🔍 Running STRIDE threat modeling..."
           echo "   Architecture: $ARCHITECTURE_FILE"
           echo "   Output: $OUTPUT_FILE"
+
+          if [ ! -f "$ARCHITECTURE_FILE" ]; then
+            echo "❌ Error: Architecture file not found: $ARCHITECTURE_FILE"
+            exit 1
+          fi
+
           python threat-modeling-repo/scripts/auto_threat_model.py
-        continue-on-error: true
+        continue-on-error: false
 
       - name: Parse threat report for outputs
         id: parse_report
