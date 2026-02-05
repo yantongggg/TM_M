@@ -1,0 +1,121 @@
+# ============================================================================
+# EXAMPLE: Architecture description for YOUR system
+# ============================================================================
+#
+# Copy this file to your repository as 'architecture.yaml' and customize it
+# to describe YOUR system's components, data flows, and trust boundaries.
+#
+# This is a simplified template - add as much detail as possible for better
+# threat modeling results.
+#
+# ============================================================================
+
+system:
+  name: "Your System Name"
+  description: "Brief description of what your system does"
+  version: "1.0.0"
+
+# List all components in your system
+components:
+  - name: "Web Frontend"
+    type: "Web Application"
+    technology: "React.js / Vue / Angular"
+    description: "Your frontend application description"
+    exposed: true              # Is this accessible from the internet?
+    trust_zone: "Internet"     # Internet, DMZ, Private Network, etc.
+
+  - name: "API Service"
+    type: "API"
+    technology: "Python / Node.js / Go"
+    description: "Your backend API description"
+    exposed: false
+    trust_zone: "Private Network"
+    database: "PostgreSQL / MySQL / MongoDB"
+
+  - name: "Database"
+    type: "Database"
+    technology: "PostgreSQL"
+    description: "Your database description"
+    exposed: false
+    trust_zone: "Private Network"
+    encryption_at_rest: true
+    encryption_in_transit: true
+
+# Describe how data flows between components
+data_flows:
+  - source: "Web Frontend"
+    destination: "API Service"
+    protocol: "HTTPS"
+    data_type: "User requests, authentication tokens"
+    authentication: "JWT / OAuth / API Key"
+
+  - source: "API Service"
+    destination: "Database"
+    protocol: "PostgreSQL over TLS"
+    data_type: "Query results, user data"
+    authentication: "Username/Password"
+
+# Describe trust boundaries and security controls
+trust_boundaries:
+  - name: "Internet to Private Network"
+    type: "Network Boundary"
+    description: "Boundary between public internet and private services"
+    controls:
+      - "Load Balancer"
+      - "Web Application Firewall (WAF)"
+      - "API Gateway"
+
+# Security context and compliance requirements
+security_context:
+  compliance_requirements:
+    - "SOC 2"
+    - "GDPR"
+    # Add: PCI DSS, HIPAA, ISO 27001, etc.
+
+  threat_modeling_scope:
+    - "Web application security"
+    - "API security"
+    - "Data protection"
+    # Add other relevant scopes
+
+  assumptions:
+    - "Services run in a VPC"
+    - "Secrets stored in vault"
+    - "Logging and monitoring enabled"
+    # Add other assumptions about your infrastructure
+
+# ============================================================================
+# TIPS FOR BETTER THREAT MODELING:
+# ============================================================================
+#
+# 1. BE SPECIFIC:
+#    - Include actual technologies and versions
+#    - Specify authentication methods
+#    - List external dependencies
+#
+# 2. ADD MORE COMPONENTS:
+#    - Caches (Redis, Memcached)
+#    - Message queues (RabbitMQ, Kafka)
+#    - Third-party APIs
+#    - Storage (S3, Azure Blob)
+#    - CDN services
+#
+# 3. DESCRIBE DATA FLOWS:
+#    - What data is being transmitted?
+#    - Is it sensitive (PII, PCI, PHI)?
+#    - What protocol is used?
+#    - How is authentication handled?
+#
+# 4. IDENTIFY TRUST BOUNDARIES:
+#    - Internet → DMZ
+#    - DMZ → Private Network
+#    - Application → Database
+#    - On-premise → Cloud
+#
+# 5. INCLUDE SECURITY CONTROLS:
+#    - Existing security measures
+#    - Encryption settings
+#    - Access controls
+#    - Monitoring/logging
+#
+# ============================================================================

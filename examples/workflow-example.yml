@@ -1,0 +1,76 @@
+# ============================================================================
+# EXAMPLE: How to call the Threat Modeling workflow from YOUR repository
+# ============================================================================
+
+# Step 1: Copy this file to YOUR repository at:
+#         .github/workflows/threat-modeling.yml
+#
+# Step 2: Create an architecture.yaml file in YOUR repository root
+#         (See architecture-example.yaml for reference)
+#
+# Step 3: Add ZHIPU_API_KEY to YOUR repository secrets:
+#         Go to: Settings → Secrets and variables → Actions → New repository secret
+#         Name: ZHIPU_API_KEY
+#         Value: your_zhipu_api_key_here
+#
+# Step 4: Commit and push - the workflow will run automatically!
+
+name: Threat Modeling
+
+# Trigger on push to main/master and on all pull requests
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  # Call the reusable workflow from TMm_sCaN repository
+  threat-modeling:
+    name: Run Threat Modeling
+    uses: yantongggg/TMm_sCaN/.github/workflows/threat-modeling-reusable.yml@master
+    with:
+      # Optional: Specify custom architecture file path (default: 'architecture.yaml')
+      architecture_path: 'architecture.yaml'
+
+      # Optional: Specify custom output path (default: 'threat_report.xml')
+      output_path: 'threat_report.xml'
+
+      # Optional: Python version (default: '3.11')
+      python_version: '3.11'
+
+      # Optional: Fail build on Critical/High threats (default: true)
+      fail_on_high_severity: true
+
+    secrets:
+      # Pass your Zhipu AI API key from your repository secrets
+      zhipu_api_key: ${{ secrets.ZHIPU_API_KEY }}
+
+  # Example job that uses the outputs from threat modeling
+  # This job only runs if threat modeling succeeds
+  post-processing:
+    name: Process Threat Model Results
+    needs: threat-modeling
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    steps:
+      - name: Check threat results
+        run: |
+          echo "Threat Model Results:"
+          echo "  Total Threats: ${{ needs.threat-modeling.outputs.threat_count }}"
+          echo "  Critical: ${{ needs.threat-modeling.outputs.critical_count }}"
+          echo "  High: ${{ needs.threat-modeling.outputs.high_count }}"
+          echo "  Has Blocking: ${{ needs.threat-modeling.outputs.has_blocking_threats }}"
+
+          if [ "${{ needs.threat-modeling.outputs.has_blocking_threats }}" = "true" ]; then
+            echo "⚠️  Blocking threats detected - review required!"
+          else
+            echo "✅ No blocking threats - good to go!"
+          fi

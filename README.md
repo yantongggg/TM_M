@@ -16,7 +16,11 @@ This project implements a "Threat Modeling as Code" approach that automatically 
 - **PR Comments**: Automatically comments on PRs with threat summary
 - **Artifact Storage**: Threat reports stored as workflow artifacts
 
-## Quick Start
+## 🚀 Quick Start
+
+### Option A: Use in This Repository (Standalone)
+
+Follow these steps to use the threat modeling in a single repository.
 
 ### 1. Repository Setup
 
@@ -61,6 +65,35 @@ git push
 
 The workflow will automatically run and generate a threat report!
 
+### Option B: Use Across Multiple Repositories (Recommended)
+
+Want to use this workflow across multiple repositories? **[→ See USAGE.md](USAGE.md)**
+
+This approach lets you:
+- ✅ Maintain threat modeling logic in ONE central place
+- ✅ Use it across unlimited repositories
+- ✅ Update all repos by updating the central workflow
+- ✅ Keep custom `architecture.yaml` in each repo
+
+**Quick setup for other repos:**
+
+```yaml
+# In YOUR repository: .github/workflows/threat-modeling.yml
+jobs:
+  threat-modeling:
+    uses: yantongggg/TMm_sCaN/.github/workflows/threat-modeling-reusable.yml@master
+    with:
+      architecture_path: 'architecture.yaml'
+    secrets:
+      zhipu_api_key: ${{ secrets.ZHIPU_API_KEY }}
+```
+
+Plus, add an `architecture.yaml` file to describe your system.
+
+**[→ Full instructions in USAGE.md](USAGE.md)**
+
+---
+
 ## File Structure
 
 ```
@@ -69,8 +102,14 @@ The workflow will automatically run and generate a threat report!
 ├── scripts/
 │   └── auto_threat_model.py                  # Threat modeling script
 ├── .github/workflows/
-│   └── threat-modeling.yml                   # GitHub Actions workflow
+│   ├── threat-modeling.yml                   # Standalone workflow
+│   └── threat-modeling-reusable.yml          # Reusable workflow (for multi-repo)
+├── examples/
+│   ├── workflow-example.yml                  # Example workflow for other repos
+│   └── architecture-example.yaml             # Architecture template
 ├── requirements.txt                           # Python dependencies
+├── README.md                                  # This file
+├── USAGE.md                                   # Guide for using across multiple repos
 └── threat_report.xml                         # Generated threat report (after CI run)
 ```
 
