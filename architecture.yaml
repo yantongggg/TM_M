@@ -1,0 +1,202 @@
+# System Architecture Description for Automated Threat Modeling
+# This file describes the system components, data flows, and trust boundaries
+# that will be analyzed using STRIDE methodology
+
+system:
+  name: "E-Commerce Payment Processing System"
+  description: "A web application handling user payments and order processing"
+  version: "1.0.0"
+
+components:
+  - name: "Web Frontend"
+    type: "Web Application"
+    technology: "React.js"
+    description: "Client-side web application for user interaction"
+    exposed: true
+    trust_zone: "Internet"
+
+  - name: "API Gateway"
+    type: "API Gateway"
+    technology: "Kong / Nginx"
+    description: "REST API entry point with authentication and rate limiting"
+    exposed: true
+    trust_zone: "DMZ"
+    authentication:
+      method: "JWT"
+      token_location: "Authorization Header"
+
+  - name: "Order Service"
+    type: "Microservice"
+    technology: "Python / FastAPI"
+    description: "Handles order creation and management"
+    exposed: false
+    trust_zone: "Private Network"
+    database: "PostgreSQL"
+
+  - name: "Payment Service"
+    type: "Microservice"
+    technology: "Java / Spring Boot"
+    description: "Processes payment transactions and integrates with payment gateways"
+    exposed: false
+    trust_zone: "Private Network"
+    handles_pci_data: true
+    external_dependencies:
+      - name: "Stripe API"
+            type: "Third-party Payment Gateway"
+      - name: "PayPal API"
+            type: "Third-party Payment Gateway"
+
+  - name: "User Service"
+    type: "Microservice"
+    technology: "Node.js / Express"
+    description: "Manages user accounts, authentication, and profiles"
+    exposed: false
+    trust_zone: "Private Network"
+    stores_pii: true
+    database: "MongoDB"
+
+  - name: "Notification Service"
+    type: "Microservice"
+    technology: "Python / Celery"
+    description: "Sends email and SMS notifications to users"
+    exposed: false
+    trust_zone: "Private Network"
+    external_dependencies:
+      - name: "SendGrid API"
+            type: "Email Service"
+      - name: "Twilio API"
+            type: "SMS Service"
+
+  - name: "Database - Orders"
+    type: "Database"
+    technology: "PostgreSQL"
+    description: "Stores order and transaction data"
+    exposed: false
+    trust_zone: "Private Network"
+    encryption_at_rest: true
+    encryption_in_transit: true
+
+  - name: "Database - Users"
+    type: "Database"
+    technology: "MongoDB"
+    description: "Stores user profiles and authentication data"
+    exposed: false
+    trust_zone: "Private Network"
+    encryption_at_rest: true
+    encryption_in_transit: true
+
+  - name: "Redis Cache"
+    type: "Cache"
+    technology: "Redis"
+    description: "Caches session data and frequently accessed data"
+    exposed: false
+    trust_zone: "Private Network"
+
+data_flows:
+  - source: "Web Frontend"
+    destination: "API Gateway"
+    protocol: "HTTPS"
+    data_type: "User requests, JWT tokens"
+    authentication: "Required"
+
+  - source: "API Gateway"
+    destination: "Order Service"
+    protocol: "HTTPS"
+    data_type: "Order data, user context"
+    authentication: "mTLS"
+
+  - source: "API Gateway"
+    destination: "User Service"
+    protocol: "HTTPS"
+    data_type: "User profile data, credentials"
+    authentication: "mTLS"
+
+  - source: "Order Service"
+    destination: "Payment Service"
+    protocol: "HTTPS/gRPC"
+    data_type: "Payment details, transaction data"
+    authentication: "mTLS"
+
+  - source: "Payment Service"
+    destination: "Stripe API"
+    protocol: "HTTPS"
+    data_type: "Credit card information, transaction details"
+    authentication: "API Key"
+
+  - source: "Payment Service"
+    destination: "PayPal API"
+    protocol: "HTTPS"
+    data_type: "Payment tokens, transaction details"
+    authentication: "API Key"
+
+  - source: "Order Service"
+    destination: "Database - Orders"
+    protocol: "PostgreSQL Protocol over TLS"
+    data_type: "Order records, transaction history"
+    authentication: "Username/Password"
+
+  - source: "User Service"
+    destination: "Database - Users"
+    protocol: "MongoDB Protocol over TLS"
+    data_type: "User profiles, hashed passwords"
+    authentication: "X.509 Certificate"
+
+  - source: "Order Service"
+    destination: "Notification Service"
+    protocol: "AMQP/RabbitMQ"
+    data_type: "Order confirmation events, user contact info"
+    authentication: "SASL"
+
+  - source: "Notification Service"
+    destination: "SendGrid API"
+    protocol: "HTTPS"
+    data_type: "Email content, recipient addresses"
+    authentication: "API Key"
+
+  - source: "Notification Service"
+    destination: "Twilio API"
+    protocol: "HTTPS"
+    data_type: "SMS content, phone numbers"
+    authentication: "API Key"
+
+trust_boundaries:
+  - name: "Internet to DMZ"
+    type: "Network Boundary"
+    description: "Boundary between public internet and DMZ network"
+    controls:
+      - "Web Application Firewall (WAF)"
+      - "DDoS Protection"
+      - "SSL/TLS Termination"
+
+  - name: "DMZ to Private Network"
+    type: "Network Boundary"
+    description: "Boundary between DMZ and private network"
+    controls:
+      - "Firewall rules (whitelist based)"
+      - "mTLS authentication"
+
+  - name: "Application to Database"
+    type: "Data Boundary"
+    description: "Boundary between application services and databases"
+    controls:
+      - "Network segmentation"
+      - "Database credentials stored in vault"
+      - "Connection pooling"
+
+security_context:
+  compliance_requirements:
+    - "PCI DSS Level 1"
+    - "GDPR"
+    - "SOC 2 Type II"
+
+  threat_modeling_scope:
+    - "Payment processing flows"
+    - "User authentication and authorization"
+    - "Data at rest and in transit"
+    - "Third-party integrations"
+
+  assumptions:
+    - "All services run within a VPC"
+    - "Secrets are managed using HashiCorp Vault"
+    - "Logging and monitoring are implemented via ELK stack"
+    - "Regular security scanning and penetration testing are performed"
