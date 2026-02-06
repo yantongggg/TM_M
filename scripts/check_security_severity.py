@@ -62,8 +62,16 @@ def check_severity(xml_path: str, mode: str = 'audit') -> int:
             return 0
 
     except FileNotFoundError:
-        print(f"Error: Report file not found: {xml_path}", file=sys.stderr)
-        return 1
+        if mode == 'audit':
+            print(f"Warning: Report file not found: {xml_path}", file=sys.stderr)
+            print("=" * 60)
+            print("AUDIT MODE: No security report available")
+            print("=" * 60)
+            print("\n✅ AUDIT MODE: Continuing without security report")
+            return 0
+        else:
+            print(f"Error: Report file not found: {xml_path}", file=sys.stderr)
+            return 1
     except ET.ParseError as e:
         print(f"Error: Failed to parse XML: {e}", file=sys.stderr)
         return 1

@@ -122,6 +122,8 @@ jobs:
 
       - name: Check for Critical/High findings
         if: always()
+        env:
+          SECURITY_REPORT_PATH: ${{ github.workspace }}/sast_report.xml
         run: |
           python scripts/check_security_severity.py
 
