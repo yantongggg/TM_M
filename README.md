@@ -1,4 +1,4 @@
-# TM_M v2.0: Repo-First Intelligent Security Orchestration
+# TM_M: Repo-First Intelligent Security Orchestration
 
 **Automated Threat Modeling & Security Test Generation with AI**
 
