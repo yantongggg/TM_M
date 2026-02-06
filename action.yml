@@ -1,0 +1,83 @@
+name: 'TM_M Threat Modeling'
+description: 'Automated threat modeling and security test generation with AI'
+author: 'TM_M Team'
+
+inputs:
+  repo-path:
+    description: 'Path to repository to analyze'
+    required: false
+    default: '.'
+
+  api-key:
+    description: 'LLM API key (Zhipu AI)'
+    required: true
+
+  generate-tests:
+    description: 'Generate executable security tests'
+    required: false
+    default: 'true'
+
+  output-dir:
+    description: 'Output directory for reports'
+    required: false
+    default: 'tm_m_reports'
+
+  config:
+    description: 'Configuration file path'
+    required: false
+    default: 'tm_m_config.yaml'
+
+outputs:
+  sarif-report:
+    description: 'Path to SARIF report for GitHub Security'
+    value: ${{ steps.run-tm-m.outputs.sarif-report }}
+
+  markdown-report:
+    description: 'Path to Markdown report'
+    value: ${{ steps.run-tm-m.outputs.markdown-report }}
+
+  threat-count:
+    description: 'Number of threats detected'
+    value: ${{ steps.run-tm-m.outputs.threat-count }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        pip install -r requirements.txt
+
+    - name: Run TM_M
+      id: run-tm-m
+      shell: bash
+      env:
+        ZHIPU_API_KEY: ${{ inputs.api-key }}
+      run: |
+        python src/main.py \
+          --repo-path "${{ inputs.repo-path }}" \
+          --output-dir "${{ inputs.output-dir }}" \
+          --config "${{ inputs.config }}" \
+          ${{ inputs.generate-tests == 'true' && '--generate-tests' || '' }}
+
+    - name: Upload SARIF to GitHub Security
+      if: hashFiles('${{ inputs.output-dir }}/*.sarif') != ''
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.output-dir }}/*.sarif
+
+    - name: Upload Reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: tm-m-reports
+        path: ${{ inputs.output-dir }}/
+        retention-days: 30
+
+branding:
+  icon: 'shield'
+  color: 'blue'

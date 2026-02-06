@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "TM_M Threat Modeling",
+          "version": "2.0.0",
+          "informationUri": "https://github.com/yantongggg/TM_M",
+          "rules": [
+            {
+              "id": "THREAT-001",
+              "name": "Example Threat",
+              "shortDescription": {
+                "text": "Example threat title"
+              },
+              "fullDescription": {
+                "text": "Detailed description of the threat"
+              },
+              "help": {
+                "text": "Mitigation strategy",
+                "markdown": "**Mitigation:**\nDetailed mitigation steps\n\n**References:**\nCWE-XXX, OWASP-XXX"
+              },
+              "properties": {
+                "category": "Spoofing",
+                "severity": "High",
+                "likelihood": "Medium",
+                "confidence": 80,
+                "priority": "P2"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "THREAT-001",
+          "level": "error",
+          "message": {
+            "text": "Threat description"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/component/path",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "attack_scenario": "Step-by-step attack scenario",
+            "impact": "Technical and business impact",
+            "mitigation": "Specific mitigation strategy",
+            "category": "Spoofing",
+            "likelihood": "Medium"
+          }
+        }
+      ],
+      "invocations": [
+        {
+          "startTimeUtc": "2025-01-01T12:00:00Z",
+          "endTimeUtc": "2025-01-01T12:00:00Z"
+        }
+      ]
+    }
+  ]
+}

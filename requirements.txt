@@ -6,3 +6,9 @@ openai>=1.0.0
 
 # YAML parsing
 pyyaml>=6.0
+
+# New dependencies for TM_M 2.0
+pytest>=7.4.0           # Test generation/execution
+playwright>=1.40.0      # Web test generation
+jinja2>=3.1.2           # Template rendering
+rich>=13.0.0            # Pretty console output

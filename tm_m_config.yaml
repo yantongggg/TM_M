@@ -1,0 +1,82 @@
+# TM_M Configuration File
+#
+# This file contains default configuration for TM_M threat modeling.
+# Copy this file to your project and customize as needed.
+
+# API Configuration
+api:
+  provider: zhipu
+  base_url: "https://open.bigmodel.cn/api/paas/v4"
+  model: "glm-4-plus"
+  temperature: 0.3
+  max_tokens: 8192
+  # Note: API key should be set via ZHIPU_API_KEY environment variable
+
+# Scanning Configuration
+scanning:
+  max_depth: 4                # Maximum directory depth to scan
+  max_files: 30               # Maximum files to read for context
+  ignore_dirs:
+    - node_modules
+    - __pycache__
+    - .git
+    - .idea
+    - .vscode
+    - venv
+    - env
+    - dist
+    - build
+    - target
+    - bin
+    - obj
+    - .venv
+    - .env
+    - coverage
+    - .pytest_cache
+    - .next
+    - .nuxt
+    - vendor
+    - bower_components
+
+# Output Configuration
+output:
+  directory: tm_m_reports     # Default output directory
+  formats:
+    - markdown                # Human-readable report
+    - sarif                   # GitHub Security report
+  include_tests: true         # Generate test code
+  test_directory: tests/security
+
+# Reporting Configuration
+reporting:
+  severity_threshold: medium  # minimum severity to report: low|medium|high|critical
+  include_recommendations: true
+  sarif_version: "2.1.0"
+
+# Technology-Specific Settings
+mobile:
+  flutter:
+    scan_dart_files: true
+    detect_dependencies: true
+    check_platform_channels: true
+
+web:
+  javascript:
+    scan_js_files: true
+    scan_ts_files: true
+    detect_xss_vectors: true
+    check_storage_usage: true
+
+backend:
+  python:
+    scan_py_files: true
+    check_sql_queries: true
+    detect_crypto_usage: true
+
+  go:
+    scan_go_files: true
+    check_sql_queries: true
+
+  java:
+    scan_java_files: true
+    check_sql_queries: true
