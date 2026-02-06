@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-Parse Semgrep SAST results from JSON to XML format
+Parse Semgrep SAST results from JSON to JSON format
 
-This script converts Semgrep JSON output to an XML format compatible
-with the threat modeling report structure.
+This script converts Semgrep JSON output to a standardized JSON format
+compatible with the threat modeling report structure.
 """
 
 import json
 import sys
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import List, Dict, Any
+from datetime import datetime
 
 
 def load_semgrep_results(json_path: str) -> Dict[str, Any]:
@@ -18,7 +18,7 @@ def load_semgrep_results(json_path: str) -> Dict[str, Any]:
     Load Semgrep results from JSON file.
 
     Args:
-        json_path: Path to semgrep-results.json
+        json_path: Path to semgrep.json
 
     Returns:
         Parsed JSON dictionary
@@ -80,15 +80,15 @@ def get_cwe_from_metadata(metadata: Dict[str, Any]) -> str:
     return None
 
 
-def convert_finding_to_xml(finding: Dict[str, Any]) -> ET.Element:
+def convert_finding_to_dict(finding: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Convert a single Semgrep finding to XML format.
+    Convert a single Semgrep finding to JSON format.
 
     Args:
         finding: Single Semgrep result
 
     Returns:
-        XML Element representing the finding
+        Dictionary representing the finding
     """
     rule_id = finding.get('check_id', 'unknown')
     severity = calculate_severity(finding.get('extra', {}).get('severity', 'INFO'))
@@ -109,68 +109,43 @@ def convert_finding_to_xml(finding: Dict[str, Any]) -> ET.Element:
     owasp = metadata.get('owasp', '')
     category = metadata.get('category', 'Implementation')
 
-    # Create threat element
-    threat = ET.Element('Threat')
-    threat.set('category', category)
-    threat.set('severity', severity)
-    threat.set('source', 'code')
+    # Build threat dictionary
+    threat = {
+        'category': category,
+        'severity': severity,
+        'source': 'code',
+        'title': message[:100] + "..." if len(message) > 100 else message,
+        'component': location,
+        'description': {
+            'issue': message,
+            'location': location,
+            'rule_id': rule_id,
+            'vulnerable_code': code_snippet.strip() if code_snippet else None,
+            'cwe': cwe,
+            'owasp': owasp
+        },
+        'attack_scenario': (
+            f"An attacker could exploit this vulnerability by crafting malicious input "
+            f"that targets the code pattern detected at {location}. This type of vulnerability "
+            f"can lead to security breaches depending on the specific issue and context."
+        ),
+        'impact': (
+            f"Potential security impact includes: data exposure, unauthorized access, "
+            f"system compromise, or other security violations depending on the specific "
+            f"vulnerability type and execution context."
+        ),
+        'likelihood': "Medium" if severity == "Medium" else "High",
+        'mitigation': build_mitigation(rule_id, location),
+        'references': build_references(rule_id, cwe, owasp),
+        'rule_id': rule_id,
+        'cwe': cwe
+    }
 
-    # Build descriptive title from message
-    title = message[:100] + "..." if len(message) > 100 else message
-    title_elem = ET.SubElement(threat, 'Title')
-    title_elem.text = title
+    return threat
 
-    # Component
-    component_elem = ET.SubElement(threat, 'Component')
-    component_elem.text = location
 
-    # Description
-    description_elem = ET.SubElement(threat, 'Description')
-    description_lines = [
-        f"**Security Issue Detected:** {message}",
-        f"",
-        f"**Location:** {location}",
-        f"**Rule ID:** {rule_id}",
-    ]
-
-    if code_snippet:
-        description_lines.extend([
-            f"**Vulnerable Code:**",
-            f"```",
-            code_snippet.strip(),
-            f"```"
-        ])
-
-    if cwe:
-        description_lines.append(f"**CWE Reference:** {cwe}")
-
-    if owasp:
-        description_lines.append(f"**OWASP Category:** {owasp}")
-
-    description_elem.text = "\n".join(description_lines)
-
-    # Attack scenario (how this could be exploited)
-    attack_scenario = ET.SubElement(threat, 'AttackScenario')
-    attack_scenario.text = (
-        f"An attacker could exploit this vulnerability by crafting malicious input "
-        f"that targets the code pattern detected at {location}. This type of vulnerability "
-        f"can lead to security breaches depending on the specific issue and context."
-    )
-
-    # Impact
-    impact_elem = ET.SubElement(threat, 'Impact')
-    impact_elem.text = (
-        f"Potential security impact includes: data exposure, unauthorized access, "
-        f"system compromise, or other security violations depending on the specific "
-        f"vulnerability type and execution context."
-    )
-
-    # Likelihood
-    likelihood_elem = ET.SubElement(threat, 'Likelihood')
-    likelihood_elem.text = "Medium" if severity == "Medium" else "High"
-
-    # Mitigation
-    mitigation_elem = ET.SubElement(threat, 'Mitigation')
+def build_mitigation(rule_id: str, location: str) -> List[str]:
+    """Build mitigation recommendations based on vulnerability type."""
     mitigation_text = [
         f"**Recommended Fix:**",
         f"1. Review the code at {location}",
@@ -197,12 +172,13 @@ def convert_finding_to_xml(finding: Dict[str, Any]) -> ET.Element:
     else:
         mitigation_text.append(f"3. Follow security best practices for this vulnerability type")
 
-    mitigation_elem.text = "\n".join(mitigation_text)
+    return mitigation_text
 
-    # References
-    references_elem = ET.SubElement(threat, 'References')
+
+def build_references(rule_id: str, cwe: str, owasp: str) -> List[str]:
+    """Build reference list for the finding."""
     refs = [
-        "Semgrep Rule: " + rule_id
+        f"Semgrep Rule: {rule_id}"
     ]
 
     if cwe:
@@ -217,25 +193,15 @@ def convert_finding_to_xml(finding: Dict[str, Any]) -> ET.Element:
         "https://owasp.org/www-project-top-ten/"
     ])
 
-    references_elem.text = "\n".join(refs)
-
-    # Add technical fields
-    rule_id_elem = ET.SubElement(threat, 'RuleID')
-    rule_id_elem.text = rule_id
-
-    if cwe:
-        cwe_elem = ET.SubElement(threat, 'CWE')
-        cwe_elem.text = str(cwe)
-
-    return threat
+    return refs
 
 
-def count_severity(threats: List[ET.Element]) -> Dict[str, int]:
+def count_severity(threats: List[Dict[str, Any]]) -> Dict[str, int]:
     """
     Count threats by severity level.
 
     Args:
-        threats: List of threat XML elements
+        threats: List of threat dictionaries
 
     Returns:
         Dictionary with counts for each severity
@@ -250,35 +216,22 @@ def count_severity(threats: List[ET.Element]) -> Dict[str, int]:
     return counts
 
 
-def generate_sast_xml_report(findings: List[Dict[str, Any]]) -> str:
+def generate_sast_json_report(findings: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Generate complete XML report from Semgrep findings.
+    Generate complete JSON report from Semgrep findings.
 
     Args:
         findings: List of Semgrep result dictionaries
 
     Returns:
-        Complete XML string
+        Complete JSON report dictionary
     """
-    # Create root element
-    root = ET.Element('ThreatModel')
-
-    # Create summary
-    summary = ET.SubElement(root, 'Summary')
-
-    system_name = ET.SubElement(summary, 'SystemName')
-    system_name.text = "SAST Security Scan"
-
-    analysis_date = ET.SubElement(summary, 'AnalysisDate')
-    from datetime import datetime
-    analysis_date.text = datetime.now().strftime('%Y-%m-%d')
-
-    # Convert findings to XML threats
+    # Convert findings to threat dictionaries
     threats = []
     for finding in findings:
         try:
-            threat_xml = convert_finding_to_xml(finding)
-            threats.append(threat_xml)
+            threat_dict = convert_finding_to_dict(finding)
+            threats.append(threat_dict)
         except Exception as e:
             print(f"Warning: Failed to convert finding: {e}", file=sys.stderr)
             continue
@@ -287,37 +240,28 @@ def generate_sast_xml_report(findings: List[Dict[str, Any]]) -> str:
     counts = count_severity(threats)
     total = sum(counts.values())
 
-    total_threats = ET.SubElement(summary, 'TotalThreats')
-    total_threats.text = str(total)
+    # Build report
+    report = {
+        'report_type': 'SAST Security Scan',
+        'system_name': 'SAST Security Scan',
+        'analysis_date': datetime.now().strftime('%Y-%m-%d'),
+        'summary': {
+            'total_threats': total,
+            'critical_count': counts['Critical'],
+            'high_count': counts['High'],
+            'medium_count': counts['Medium'],
+            'low_count': counts['Low'],
+            'overview': (
+                f"SAST scan identified {total} potential code-level security issues. "
+                f"Critical: {counts['Critical']}, High: {counts['High']}, "
+                f"Medium: {counts['Medium']}, Low: {counts['Low']}. "
+                f"These findings represent implementation vulnerabilities detected through static code analysis."
+            )
+        },
+        'threats': threats
+    }
 
-    critical_count = ET.SubElement(summary, 'CriticalCount')
-    critical_count.text = str(counts['Critical'])
-
-    high_count = ET.SubElement(summary, 'HighCount')
-    high_count.text = str(counts['High'])
-
-    medium_count = ET.SubElement(summary, 'MediumCount')
-    medium_count.text = str(counts['Medium'])
-
-    low_count = ET.SubElement(summary, 'LowCount')
-    low_count.text = str(counts['Low'])
-
-    overview = ET.SubElement(summary, 'Overview')
-    overview.text = (
-        f"SAST scan identified {total} potential code-level security issues. "
-        f"Critical: {counts['Critical']}, High: {counts['High']}, "
-        f"Medium: {counts['Medium']}, Low: {counts['Low']}. "
-        f"These findings represent implementation vulnerabilities detected through static code analysis."
-    )
-
-    # Add threats section
-    threats_element = ET.SubElement(root, 'Threats')
-    for threat in threats:
-        threats_element.append(threat)
-
-    # Pretty print and return
-    ET.indent(root, space="  ")
-    return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding='unicode')
+    return report
 
 
 def main():
@@ -327,42 +271,42 @@ def main():
     # Get paths
     script_dir = Path(__file__).parent.parent
     input_path = os.environ.get('SEMGREP_RESULTS_PATH',
-                               str(script_dir / 'semgrep-results.json'))
+                               str(script_dir / 'semgrep.json'))
     output_path = os.environ.get('SAST_OUTPUT_PATH',
-                                str(script_dir / 'sast_report.xml'))
+                                str(script_dir / 'sast_report.json'))
 
-    print(f"Loading SAST results from: {input_path}")
+    print(f"📂 Loading SAST results from: {input_path}")
 
     # Load results
     results = load_semgrep_results(input_path)
     findings = results.get('results', [])
 
     if not findings:
-        print("No SAST findings detected.")
+        print("✅ No SAST findings detected.")
         # Generate empty report
         findings = []
 
-    print(f"Found {len(findings)} SAST findings")
+    print(f"🔍 Found {len(findings)} SAST findings")
 
-    # Generate XML report
-    xml_report = generate_sast_xml_report(findings)
+    # Generate JSON report
+    report = generate_sast_json_report(findings)
 
     # Save report
     with open(output_path, 'w', encoding='utf-8') as f:
-        f.write(xml_report)
+        json.dump(report, f, indent=2, ensure_ascii=False)
 
-    print(f"SAST report saved to: {output_path}")
+    print(f"✅ SAST report saved to: {output_path}")
 
     # Print summary
-    counts = count_severity(list(ET.fromstring(xml_report).findall('.//Threat')))
-    print(f"Severity breakdown:")
-    print(f"  Critical: {counts['Critical']}")
-    print(f"  High: {counts['High']}")
-    print(f"  Medium: {counts['Medium']}")
-    print(f"  Low: {counts['Low']}")
+    summary = report['summary']
+    print(f"\n📊 Severity breakdown:")
+    print(f"  Critical: {summary['critical_count']}")
+    print(f"  High: {summary['high_count']}")
+    print(f"  Medium: {summary['medium_count']}")
+    print(f"  Low: {summary['low_count']}")
 
     # Exit with error if Critical/High found
-    if counts['Critical'] > 0 or counts['High'] > 0:
+    if summary['critical_count'] > 0 or summary['high_count'] > 0:
         print("\n⚠️  Critical or High severity findings detected!")
         sys.exit(1)
 
